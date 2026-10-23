@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -86,7 +87,7 @@ fun ClutchAppRoot(
     var isSidebarOpen by remember { mutableStateOf(false) }
     var isProfileOpen by remember { mutableStateOf(false) }
 
-    var showIntro by remember { mutableStateOf(true) }
+    var showIntro by rememberSaveable { mutableStateOf(true) }
     val isImeVisible = WindowInsets.isImeVisible
 
     Box(
@@ -98,7 +99,8 @@ fun ClutchAppRoot(
         Scaffold(
             topBar = {
                 ClutchTopAppBar(
-                    onOpenProfile = { isProfileOpen = true }
+                    onOpenProfile = { isProfileOpen = true },
+                    showLogo = !showIntro
                 )
             },
             bottomBar = {

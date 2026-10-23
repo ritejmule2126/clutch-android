@@ -16,6 +16,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -23,7 +24,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ClutchTopAppBar(
     onOpenProfile: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showLogo: Boolean = true
 ) {
     Surface(
         color = Color(0xFFFFFFFF).copy(alpha = 0.95f),
@@ -38,11 +40,15 @@ fun ClutchTopAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Clean Logo in top left corner
-            ClutchReactorLogo(
-                size = 36.dp,
-                showText = true
-            )
+            // Clean Logo in top left corner (smooth handover after intro)
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.alpha(if (showLogo) 1f else 0f)
+            ) {
+                ClutchReactorLogo(
+                    size = 36.dp,
+                    showText = true
+                )
+            }
 
             // User Profile Action Button (Replaced Search)
             IconButton(

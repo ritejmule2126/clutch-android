@@ -41,7 +41,8 @@ fun CinematicIntroScreen(
     val density = LocalDensity.current
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val rawStatusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val statusBarTop = if (rawStatusBarTop > 0.dp) rawStatusBarTop else 24.dp
 
     // Stages: 0 = 3 parts flying in, 1 = snapped at center, 2 = gliding to top-left
     var stage by remember { mutableStateOf(0) }
