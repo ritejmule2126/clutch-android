@@ -9,6 +9,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Button
@@ -44,13 +47,19 @@ fun DashboardScreen(
     scanLatencyMs: Float,
     engineName: String,
     onFilterChanged: (String) -> Unit,
-    onSimulateUpload: (String, FileType) -> Unit,
+    onUploadDocument: (android.net.Uri) -> Unit = {},
     onNavigateToChatWithPrompt: (String) -> Unit,
     onChatWithDoc: (StashDocument) -> Unit,
     onInspectDoc: (StashDocument) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var omnibarQuery by remember { mutableStateOf("") }
+        var omnibarQuery by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val docPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: android.net.Uri? ->
+        uri?.let { onUploadDocument(it) }
+    }
 
     val filteredDocs = remember(activeFilter, documents) {
         if (activeFilter == "All") documents
@@ -391,7 +400,7 @@ fun DashboardScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    onSimulateUpload("Personal_Notes.md", FileType.MARKDOWN)
+                                    docPickerLauncher.launch(arrayOf("text/*", "application/json", "text/markdown", "*/*"))
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -409,12 +418,12 @@ fun DashboardScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Add Notes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Import Note", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
 
                             Button(
                                 onClick = {
-                                    onSimulateUpload("Product_Specs.pdf", FileType.PDF)
+                                    docPickerLauncher.launch(arrayOf("application/pdf", "*/*"))
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -432,7 +441,7 @@ fun DashboardScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Import PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Import File", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                     }
@@ -491,7 +500,51 @@ fun DashboardScreen(
         }
 
         // Clean Document List Items
-        items(filteredDocs) { doc ->
+        if (filteredDocs.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White)
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
+                        .padding(28.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF1F5F9)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = null,
+                                tint = TextMuted,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No Documents Indexed",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = MidnightChassis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Tap 'Import File' above to index PDFs or notes directly into your knowledge base.",
+                            fontSize = 12.sp,
+                            color = TextMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            items(filteredDocs) { doc ->
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -602,6 +655,8 @@ fun DashboardScreen(
                     }
                 }
             }
+        }
+
         }
 
         item { Spacer(modifier = Modifier.height(12.dp)) }

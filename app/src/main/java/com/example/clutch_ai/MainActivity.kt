@@ -79,6 +79,7 @@ fun ClutchAppRoot(
     viewModel: ClutchViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val tabs = remember {
         listOf(NavigationTab.DASHBOARD, NavigationTab.CHAT, NavigationTab.TRAIN, NavigationTab.VAULT)
     }
@@ -138,8 +139,8 @@ fun ClutchAppRoot(
                             scanLatencyMs = uiState.telemetry.scanLatencyMs,
                             engineName = uiState.telemetry.engineName,
                             onFilterChanged = { viewModel.setFilter(it) },
-                            onSimulateUpload = { fileName, type ->
-                                viewModel.simulateUpload(fileName, type)
+                            onUploadDocument = { uri ->
+                                viewModel.uploadDocumentFromUri(context, uri)
                             },
                             onNavigateToChatWithPrompt = { prompt ->
                                 coroutineScope.launch {
@@ -175,7 +176,8 @@ fun ClutchAppRoot(
                             onOpenHistory = { isSidebarOpen = true },
                             onNewChat = { viewModel.createNewChatSession() },
                             onRemoveAttachedDoc = { viewModel.removeAttachedDoc() },
-                            onSelectCitation = { viewModel.setSelectedCitation(it) }
+                            onSelectCitation = { viewModel.setSelectedCitation(it) },
+                            onAttachDocument = { uri: android.net.Uri -> viewModel.attachDocumentFromUri(context, uri) }
                         )
                     }
 

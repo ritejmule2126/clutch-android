@@ -1,9 +1,19 @@
 package com.example.clutch_ai.viewmodel
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clutch_ai.engine.UniversalKnowledgeEngine
 import com.example.clutch_ai.model.*
+import com.example.clutch_ai.network.ApiClient
+import com.example.clutch_ai.network.ChatStreamRequest
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,12 +48,12 @@ data class ClutchUiState(
     val isHistoryOpen: Boolean = false,
     val uploadState: UploadProgressState = UploadProgressState(),
     val telemetry: TelemetryData = TelemetryData(
-        totalFiles = 3,
-        totalVectors = 4992,
-        totalChunks = 13,
-        storageEstimateKb = 1420,
-        scanLatencyMs = 6.2f,
-        engineName = "Local On-Device Engine"
+        totalFiles = 0,
+        totalVectors = 0,
+        totalChunks = 0,
+        storageEstimateKb = 0,
+        scanLatencyMs = 0f,
+        engineName = "Clutch Cloud & Local AI"
     ),
     val memories: List<TrainedMemory> = emptyList(),
     val trainingState: TrainingProgressState = TrainingProgressState()
@@ -55,99 +65,11 @@ class ClutchViewModel : ViewModel() {
     val uiState: StateFlow<ClutchUiState> = _uiState.asStateFlow()
 
     init {
-        seedInitialState()
+        initializeProductionState()
+        fetchDocumentsFromBackend()
     }
 
-    private fun seedInitialState() {
-        val initialDocs = listOf(
-            StashDocument(
-                id = "doc-1",
-                title = "Paylogic_System_Architecture.pdf",
-                fileType = FileType.PDF,
-                fileSizeFormat = "420 KB",
-                chunkCount = 6,
-                addedDate = "Today, 10:14 AM",
-                summary = "Full microservices overview: Docker orchestration, Redis L2 caching, RabbitMQ message queues, and zero-downtime deployment specs.",
-                chunks = listOf(
-                    DocumentChunk(
-                        id = "c-1",
-                        docId = "doc-1",
-                        docTitle = "Paylogic_System_Architecture.pdf",
-                        chunkIndex = 1,
-                        text = "The ecollection-api listens on port 8443 and connects to redis:7-alpine on port 6379 for fast session verification.",
-                        vectorPreview = listOf(0.12f, -0.45f, 0.78f, -0.09f, 0.33f),
-                        cosineScore = 0.962f
-                    ),
-                    DocumentChunk(
-                        id = "c-2",
-                        docId = "doc-1",
-                        docTitle = "Paylogic_System_Architecture.pdf",
-                        chunkIndex = 2,
-                        text = "RabbitMQ staging broker routes asynchronous ledger events across worker nodes with AMQP 0-9-1 protocols.",
-                        vectorPreview = listOf(-0.22f, 0.61f, -0.15f, 0.88f, -0.04f),
-                        cosineScore = 0.941f
-                    )
-                )
-            ),
-            StashDocument(
-                id = "doc-2",
-                title = "Vedic_Cosmic_Cycles_and_Dharma.md",
-                fileType = FileType.MARKDOWN,
-                fileSizeFormat = "180 KB",
-                chunkCount = 4,
-                addedDate = "Yesterday",
-                summary = "Detailed analysis of the 4 Yugas (Satya, Treta, Dvapara, Kali) and the Bhagavad Gita's Nishkama Karma philosophy.",
-                chunks = listOf(
-                    DocumentChunk(
-                        id = "c-3",
-                        docId = "doc-2",
-                        docTitle = "Vedic_Cosmic_Cycles_and_Dharma.md",
-                        chunkIndex = 1,
-                        text = "Satya Yuga represents 100% truth and alignment with cosmic order; Dvapara brings dualism and the discourse of Krishna on duty.",
-                        vectorPreview = listOf(0.33f, 0.14f, 0.85f, -0.21f, 0.44f),
-                        cosineScore = 0.978f
-                    )
-                )
-            ),
-            StashDocument(
-                id = "doc-3",
-                title = "Terraform_DevOps_State_Matrix.txt",
-                fileType = FileType.TEXT,
-                fileSizeFormat = "820 KB",
-                chunkCount = 3,
-                addedDate = "3 days ago",
-                summary = "AWS Amplify and core Postgres bootstrapping scripts for staging and development infrastructure.",
-                chunks = emptyList()
-            )
-        )
-
-        val initialMemories = listOf(
-            TrainedMemory(
-                id = "mem-1",
-                category = MemoryCategory.WORK_HABIT,
-                title = "Lead Infrastructure Engineer",
-                content = "User leads high-performance cloud engineering, Terraform infrastructure, Docker containerization, and Postgres databases.",
-                confidenceScore = 0.985f,
-                learnedAt = "System Inception"
-            ),
-            TrainedMemory(
-                id = "mem-2",
-                category = MemoryCategory.UNIVERSAL_WISDOM,
-                title = "Nishkama Karma Discipline",
-                content = "Focus 100% on the execution and duty of current actions, maintaining emotional equanimity regardless of outcome fluctuations.",
-                confidenceScore = 0.972f,
-                learnedAt = "System Inception"
-            ),
-            TrainedMemory(
-                id = "mem-3",
-                category = MemoryCategory.CORE_RULE,
-                title = "Zero-Cloud Local Privacy",
-                content = "All queries and personal facts must strictly remain on-device. Never transmit user data to external third-party servers.",
-                confidenceScore = 0.999f,
-                learnedAt = "System Inception"
-            )
-        )
-
+    private fun initializeProductionState() {
         val initialSessionId = UUID.randomUUID().toString()
         val initialSession = ChatSession(
             id = initialSessionId,
@@ -158,11 +80,57 @@ class ClutchViewModel : ViewModel() {
 
         _uiState.update {
             it.copy(
-                documents = initialDocs,
-                memories = initialMemories,
+                documents = emptyList(),
+                memories = emptyList(),
                 chatSessions = listOf(initialSession),
                 activeSessionId = initialSessionId
             )
+        }
+    }
+
+    fun fetchDocumentsFromBackend() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = ApiClient.apiService.listDocuments()
+                if (response.isSuccessful && response.body() != null) {
+                    val backendDocs = response.body()!!
+                    val stashDocs = backendDocs.map { bDoc ->
+                        val fType = when {
+                            bDoc.fileType.contains("pdf", true) || bDoc.originalFilename.endsWith(".pdf", true) -> FileType.PDF
+                            bDoc.fileType.contains("md", true) || bDoc.originalFilename.endsWith(".md", true) -> FileType.MARKDOWN
+                            else -> FileType.TEXT
+                        }
+                        StashDocument(
+                            id = bDoc.id,
+                            title = bDoc.title.ifBlank { bDoc.originalFilename },
+                            fileType = fType,
+                            fileSizeFormat = "${(bDoc.fileSize / 1024).coerceAtLeast(1)} KB",
+                            chunkCount = bDoc.chunkCount,
+                            addedDate = "Synced from Cloud",
+                            summary = bDoc.summary ?: "Indexed for semantic search & RAG synthesis.",
+                            chunks = emptyList()
+                        )
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        _uiState.update { state ->
+                            val totalChunks = stashDocs.sumOf { it.chunkCount }
+                            val totalKb = backendDocs.sumOf { it.fileSize / 1024 }
+                            state.copy(
+                                documents = stashDocs,
+                                telemetry = state.telemetry.copy(
+                                    totalFiles = stashDocs.size,
+                                    totalChunks = totalChunks,
+                                    totalVectors = totalChunks * 384,
+                                    storageEstimateKb = totalKb
+                                )
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Keep local state if server is offline
+            }
         }
     }
 
@@ -170,12 +138,56 @@ class ClutchViewModel : ViewModel() {
         _uiState.update { it.copy(activeFilter = filter) }
     }
 
+    private var _attachedDocContent: String? = null
+
     fun attachDocumentToChat(docTitle: String) {
         _uiState.update { it.copy(attachedDocTitle = docTitle) }
     }
 
     fun removeAttachedDoc() {
+        _attachedDocContent = null
         _uiState.update { it.copy(attachedDocTitle = null) }
+    }
+
+    fun attachDocumentFromUri(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                var fileName = "Document"
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex >= 0) fileName = cursor.getString(nameIndex)
+                    }
+                }
+
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+                val textContent = if (fileName.endsWith(".pdf", ignoreCase = true)) {
+                    "Attached PDF: $fileName (${bytes.size} bytes). Uploaded and referenced in session."
+                } else {
+                    String(bytes, Charsets.UTF_8)
+                }
+
+                _attachedDocContent = textContent
+
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(attachedDocTitle = fileName) }
+                    android.widget.Toast.makeText(context, "Attached: $fileName", android.widget.Toast.LENGTH_SHORT).show()
+                }
+
+                try {
+                    val mediaType = "application/octet-stream".toMediaTypeOrNull()
+                    val requestBody = bytes.toRequestBody(mediaType)
+                    val part = MultipartBody.Part.createFormData("file", fileName, requestBody)
+                    val titleBody = fileName.toRequestBody("text/plain".toMediaTypeOrNull())
+                    ApiClient.apiService.uploadDocument(part, titleBody)
+                } catch (ignored: Exception) {}
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     fun setSelectedCitation(citation: Citation?) {
@@ -274,7 +286,126 @@ class ClutchViewModel : ViewModel() {
         }
     }
 
-    fun simulateUpload(fileName: String, fileType: FileType) {
+        fun uploadDocumentFromUri(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            var fileName = "Document"
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex >= 0) fileName = cursor.getString(nameIndex)
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            uploadState = UploadProgressState(
+                                step = UploadStep.SCANNING,
+                                progress = 0.20f,
+                                fileName = fileName
+                            )
+                        )
+                    }
+                }
+
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            uploadState = UploadProgressState(
+                                step = UploadStep.PARSING,
+                                progress = 0.50f,
+                                fileName = fileName
+                            )
+                        )
+                    }
+                }
+
+                val mediaType = "application/octet-stream".toMediaTypeOrNull()
+                val requestBody = bytes.toRequestBody(mediaType)
+                val part = MultipartBody.Part.createFormData("file", fileName, requestBody)
+                val titleBody = fileName.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            uploadState = UploadProgressState(
+                                step = UploadStep.GENERATING_VECTORS,
+                                progress = 0.85f,
+                                fileName = fileName
+                            )
+                        )
+                    }
+                }
+
+                val response = ApiClient.apiService.uploadDocument(part, titleBody)
+                val fType = when {
+                    fileName.endsWith(".pdf", true) -> FileType.PDF
+                    fileName.endsWith(".md", true) -> FileType.MARKDOWN
+                    else -> FileType.TEXT
+                }
+
+                val bDoc = response.body()
+                val newDoc = if (response.isSuccessful && bDoc != null) {
+                    StashDocument(
+                        id = bDoc.id,
+                        title = bDoc.title.ifBlank { fileName },
+                        fileType = fType,
+                        fileSizeFormat = "${(bytes.size / 1024).coerceAtLeast(1)} KB",
+                        chunkCount = bDoc.chunkCount,
+                        addedDate = "Just now",
+                        summary = bDoc.summary ?: "Successfully indexed into knowledge base with ${bDoc.chunkCount} vector segments."
+                    )
+                } else {
+                    StashDocument(
+                        id = UUID.randomUUID().toString(),
+                        title = fileName,
+                        fileType = fType,
+                        fileSizeFormat = "${(bytes.size / 1024).coerceAtLeast(1)} KB",
+                        chunkCount = 1,
+                        addedDate = "Just now",
+                        summary = "Document cached locally on device."
+                    )
+                }
+
+                withContext(Dispatchers.Main) {
+                    _uiState.update { current ->
+                        val updatedDocs = listOf(newDoc) + current.documents.filter { it.id != newDoc.id }
+                        val addedChunks = if (bDoc != null) bDoc.chunkCount else 1
+                        current.copy(
+                            documents = updatedDocs,
+                            uploadState = UploadProgressState(
+                                step = UploadStep.STASHED,
+                                progress = 1.0f,
+                                fileName = fileName
+                            ),
+                            telemetry = current.telemetry.copy(
+                                totalFiles = updatedDocs.size,
+                                totalChunks = current.telemetry.totalChunks + addedChunks,
+                                totalVectors = current.telemetry.totalVectors + (addedChunks * 384),
+                                storageEstimateKb = current.telemetry.storageEstimateKb + (bytes.size / 1024)
+                            )
+                        )
+                    }
+                    android.widget.Toast.makeText(context, "Indexed: $fileName", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(uploadState = UploadProgressState()) }
+                    android.widget.Toast.makeText(context, "Upload error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                delay(1200)
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(uploadState = UploadProgressState()) }
+                }
+            }
+        }
+    }
+
+fun simulateUpload(fileName: String, fileType: FileType) {
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -382,41 +513,179 @@ class ClutchViewModel : ViewModel() {
             )
         }
 
-        // Dual-Brain Synthesis: Universal Foundation + Local Trained Memories
+        // Live Catalyst Cloud AI Streaming with Sovereign Local Fallback
         viewModelScope.launch {
-            delay(650)
+            val startTime = System.currentTimeMillis()
+            var cloudSuccess = false
 
-            val activeMemories = uiState.value.memories.filter { it.isActive }
-            val generationResult = UniversalKnowledgeEngine.generateSynthesis(
-                prompt = promptText,
-                activeMemories = activeMemories,
-                stashedDocs = uiState.value.documents,
-                attachedDocTitle = attachedDoc
-            )
+            try {
+                val clientTz = java.util.TimeZone.getDefault().id
+                val clientNow = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).format(java.util.Date())
 
-            val aiMessage = ChatMessage(
-                id = UUID.randomUUID().toString(),
-                sender = MessageSender.AI,
-                text = generationResult.text,
-                timestamp = "Just now",
-                latencyMs = generationResult.latencyMs,
-                modelName = generationResult.modelName,
-                codeSnippet = generationResult.codeSnippet,
-                citations = generationResult.citations,
-                memoryHits = generationResult.memoryHits
-            )
-
-            _uiState.update { state ->
-                val finalMessages = updatedMessages + aiMessage
-                val finalSession = updatedSession.copy(messages = finalMessages)
-                val finalSessions = state.chatSessions.map {
-                    if (it.id == session.id) finalSession else it
+                val docSnippet = _attachedDocContent?.take(8000) ?: ""
+                val contentToSend = if (attachedDoc != null && docSnippet.isNotBlank()) {
+                    "Referencing Attached Document ($attachedDoc): " + docSnippet + " " + promptText
+                } else {
+                    promptText
                 }
-                state.copy(
-                    chatSessions = finalSessions,
-                    isGeneratingResponse = false,
-                    attachedDocTitle = null
+
+                val response = withContext(Dispatchers.IO) {
+                    ApiClient.apiService.streamChat(
+                        request = ChatStreamRequest(
+                            content = contentToSend,
+                            sessionId = session.id,
+                            useRag = true,
+                            timezone = clientTz,
+                            clientTime = clientNow
+                        ),
+                        timezone = clientTz
+                    )
+                }
+
+                if (response.isSuccessful && response.body() != null) {
+                    val aiMsgId = UUID.randomUUID().toString()
+                    var aiMessage = ChatMessage(
+                        id = aiMsgId,
+                        sender = MessageSender.AI,
+                        text = "",
+                        timestamp = "Just now",
+                        modelName = "Clutch AI (Catalyst Cloud)",
+                        isThinking = true
+                    )
+
+                    // Add empty placeholder message for live streaming
+                    _uiState.update { state ->
+                        val initialAiMessages = updatedMessages + aiMessage
+                        val initialSession = updatedSession.copy(messages = initialAiMessages)
+                        val initialSessions = state.chatSessions.map {
+                            if (it.id == session.id) initialSession else it
+                        }
+                        state.copy(chatSessions = initialSessions)
+                    }
+
+                    val accumulatedText = StringBuilder()
+                    val accumulatedThought = StringBuilder()
+
+                    withContext(Dispatchers.IO) {
+                        val reader = BufferedReader(InputStreamReader(response.body()!!.byteStream()))
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            val currentLine = line ?: continue
+                            if (currentLine.startsWith("data: ")) {
+                                val dataStr = currentLine.removePrefix("data: ").trim()
+                                if (dataStr.isNotBlank() && dataStr != "[DONE]") {
+                                    try {
+                                        val json = JSONObject(dataStr)
+                                        val type = json.optString("type")
+                                        if (type == "thinking") {
+                                            val delta = json.optString("delta")
+                                            accumulatedThought.append(delta)
+                                            withContext(Dispatchers.Main) {
+                                                aiMessage = aiMessage.copy(
+                                                    isThinking = true,
+                                                    thoughtText = accumulatedThought.toString()
+                                                )
+                                                _uiState.update { state ->
+                                                    val streamMsgs = updatedMessages + aiMessage
+                                                    val streamSession = updatedSession.copy(messages = streamMsgs)
+                                                    val streamSessions = state.chatSessions.map {
+                                                        if (it.id == session.id) streamSession else it
+                                                    }
+                                                    state.copy(chatSessions = streamSessions)
+                                                }
+                                            }
+                                        } else if (type == "thinking_done") {
+                                            withContext(Dispatchers.Main) {
+                                                aiMessage = aiMessage.copy(isThinking = false)
+                                                _uiState.update { state ->
+                                                    val streamMsgs = updatedMessages + aiMessage
+                                                    val streamSession = updatedSession.copy(messages = streamMsgs)
+                                                    val streamSessions = state.chatSessions.map {
+                                                        if (it.id == session.id) streamSession else it
+                                                    }
+                                                    state.copy(chatSessions = streamSessions)
+                                                }
+                                            }
+                                        } else if (type == "token") {
+                                            val delta = json.optString("delta")
+                                            accumulatedText.append(delta)
+
+                                            val currentSnapshot = accumulatedText.toString()
+                                            val elapsed = System.currentTimeMillis() - startTime
+                                            withContext(Dispatchers.Main) {
+                                                aiMessage = aiMessage.copy(
+                                                    text = currentSnapshot,
+                                                    isThinking = false,
+                                                    latencyMs = elapsed
+                                                )
+                                                _uiState.update { state ->
+                                                    val streamMsgs = updatedMessages + aiMessage
+                                                    val streamSession = updatedSession.copy(messages = streamMsgs)
+                                                    val streamSessions = state.chatSessions.map {
+                                                        if (it.id == session.id) streamSession else it
+                                                    }
+                                                    state.copy(chatSessions = streamSessions)
+                                                }
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        // Ignore malformed intermediate SSE chunk
+                                    }
+                                }
+                            }
+                        }
+                        reader.close()
+                    }
+
+                    if (accumulatedText.isNotBlank()) {
+                        cloudSuccess = true
+                    }
+                }
+            } catch (e: Exception) {
+                cloudSuccess = false
+            }
+
+            if (!cloudSuccess) {
+                // Seamless local fallback if cloud is unreachable
+                val activeMemories = uiState.value.memories.filter { it.isActive }
+                val generationResult = UniversalKnowledgeEngine.generateSynthesis(
+                    prompt = promptText,
+                    activeMemories = activeMemories,
+                    stashedDocs = uiState.value.documents,
+                    attachedDocTitle = attachedDoc
                 )
+
+                val aiMessage = ChatMessage(
+                    id = UUID.randomUUID().toString(),
+                    sender = MessageSender.AI,
+                    text = generationResult.text,
+                    timestamp = "Just now",
+                    latencyMs = generationResult.latencyMs,
+                    modelName = generationResult.modelName,
+                    codeSnippet = generationResult.codeSnippet,
+                    citations = generationResult.citations,
+                    memoryHits = generationResult.memoryHits
+                )
+
+                _uiState.update { state ->
+                    val finalMessages = updatedMessages + aiMessage
+                    val finalSession = updatedSession.copy(messages = finalMessages)
+                    val finalSessions = state.chatSessions.map {
+                        if (it.id == session.id) finalSession else it
+                    }
+                    state.copy(
+                        chatSessions = finalSessions,
+                        isGeneratingResponse = false,
+                        attachedDocTitle = null
+                    )
+                }
+            } else {
+                _uiState.update { state ->
+                    state.copy(
+                        isGeneratingResponse = false,
+                        attachedDocTitle = null
+                    )
+                }
             }
         }
     }

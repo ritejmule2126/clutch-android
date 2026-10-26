@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
     // 10.0.2.2 maps to host machine localhost in standard Android Emulator
-    private const val DEFAULT_BASE_URL = "http://10.0.2.2:8000/"
+    private const val DEFAULT_BASE_URL = "https://clutch-backend-50046873539.development.catalystappsail.in/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BASIC

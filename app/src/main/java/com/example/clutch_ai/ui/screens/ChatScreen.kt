@@ -1,4 +1,8 @@
 package com.example.clutch_ai.ui.screens
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.material.icons.filled.Close
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -59,10 +63,17 @@ fun ChatScreen(
     onNewChat: () -> Unit,
     onRemoveAttachedDoc: () -> Unit,
     onSelectCitation: (Citation) -> Unit,
+    onAttachDocument: ((android.net.Uri) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var promptInput by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: android.net.Uri? ->
+        uri?.let { onAttachDocument?.invoke(it) }
+    }
     val listState = rememberLazyListState()
     val isImeVisible = WindowInsets.isImeVisible
 
@@ -241,39 +252,63 @@ fun ChatScreen(
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.AttachFile,
-                        contentDescription = "Attach Document",
-                        tint = TextMuted,
+                        contentDescription = "Attach Document from Device",
+                        tint = ElectricCyanDark,
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(22.dp)
                             .clickable {
-                                Toast
-                                    .makeText(
-                                        context,
-                                        "Select document from Dashboard Stash",
-                                        Toast.LENGTH_SHORT
+                                filePickerLauncher.launch(
+                                    arrayOf(
+                                        "*/*",
+                                        "application/pdf",
+                                        "text/*",
+                                        "application/json",
+                                        "image/*"
                                     )
-                                    .show()
+                                )
                             }
                     )
                 },
                 trailingIcon = {
-                    ClayButton(
-                        onClick = {
-                            if (promptInput.isNotBlank()) {
-                                onSendMessage(promptInput)
-                                promptInput = ""
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (promptInput.isEmpty() && clipboardManager.hasText()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFE0F2FE))
+                                    .clickable {
+                                        clipboardManager.getText()?.text?.let { promptInput = it }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "Paste",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ElectricCyanDark,
+                                    fontFamily = FontFamily.Monospace
+                                )
                             }
-                        },
-                        backgroundColor = ElectricCyan,
-                        contentColor = MidnightChassis,
-                        cornerRadius = 14.dp
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
-                            tint = MidnightChassis,
-                            modifier = Modifier.size(16.dp)
-                        )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        ClayButton(
+                            onClick = {
+                                if (promptInput.isNotBlank()) {
+                                    onSendMessage(promptInput)
+                                    promptInput = ""
+                                }
+                            },
+                            backgroundColor = ElectricCyan,
+                            contentColor = MidnightChassis,
+                            cornerRadius = 14.dp
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = MidnightChassis,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 },
                 cornerRadius = 24.dp
@@ -357,8 +392,38 @@ fun AiMessageItem(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // Thinking indicator loader under AI header
+        if (message.isThinking || (message.text.isBlank() && message.sender == MessageSender.AI)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF1F5F9))
+                    .border(1.dp, ClayBorder, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 2.dp,
+                    color = ElectricCyan
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Thinking...",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextMuted,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
         // Markdown Free-Style Text Column
-        MarkdownTextColumn(text = message.text, codeSnippet = message.codeSnippet)
+        if (message.text.isNotBlank()) {
+            MarkdownTextColumn(text = message.text, codeSnippet = message.codeSnippet)
+        }
 
         // Recalled Personal Memory Tags
         if (message.memoryHits.isNotEmpty()) {

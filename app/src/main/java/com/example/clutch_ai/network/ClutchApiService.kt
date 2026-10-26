@@ -16,7 +16,9 @@ data class ChatStreamRequest(
     @SerializedName("session_id") val sessionId: String? = null,
     val provider: String? = null,
     val model: String? = null,
-    @SerializedName("use_rag") val useRag: Boolean = true
+    @SerializedName("use_rag") val useRag: Boolean = true,
+    val timezone: String? = null,
+    @SerializedName("client_time") val clientTime: String? = null
 )
 
 data class SearchRequest(
@@ -52,8 +54,17 @@ interface ClutchApiService {
     @Streaming
     suspend fun streamChat(
         @Body request: ChatStreamRequest,
-        @Header("Authorization") token: String? = null
+        @Header("Authorization") token: String? = null,
+        @Header("X-Timezone") timezone: String? = null
     ): Response<ResponseBody>
+
+    @Multipart
+    @POST("api/v1/documents/upload")
+    suspend fun uploadDocument(
+        @Part file: okhttp3.MultipartBody.Part,
+        @Part("title") title: okhttp3.RequestBody? = null,
+        @Header("Authorization") token: String? = null
+    ): Response<BackendDocument>
 
     @GET("api/v1/documents/")
     suspend fun listDocuments(

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -286,7 +287,51 @@ fun VaultScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f)
         ) {
-            items(filteredChunks) { chunk ->
+            if (filteredChunks.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White)
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+                            .padding(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFF1F5F9)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Description,
+                                    contentDescription = null,
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Knowledge Vault is Empty",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MidnightChassis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Import documents from Dashboard or attach in Chat to inspect vector segments and citations.",
+                                fontSize = 12.sp,
+                                color = TextMuted,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(filteredChunks) { chunk ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -343,6 +388,7 @@ fun VaultScreen(
                         )
                     }
                 }
+            }
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }

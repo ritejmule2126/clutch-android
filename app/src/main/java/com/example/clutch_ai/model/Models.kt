@@ -58,7 +58,9 @@ data class ChatMessage(
     val codeSnippet: CodeSnippet? = null,
     val citations: List<Citation> = emptyList(),
     val memoryHits: List<String> = emptyList(),
-    val attachedDocTitle: String? = null
+    val attachedDocTitle: String? = null,
+    val thoughtText: String? = null,
+    val isThinking: Boolean = false
 )
 
 data class ChatSession(

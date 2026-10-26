@@ -218,7 +218,8 @@ fun ClayTextField(
     placeholder: String = "",
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
-    cornerRadius: Dp = 16.dp
+    cornerRadius: Dp = 16.dp,
+    maxLines: Int = 6
 ) {
     val shape = RoundedCornerShape(cornerRadius)
 
@@ -227,7 +228,7 @@ fun ClayTextField(
             .clip(shape)
             .background(CardSurface)
             .border(width = 1.dp, color = ClayBorder, shape = shape)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             leadingIcon?.invoke()
@@ -246,6 +247,7 @@ fun ClayTextField(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
+                    maxLines = maxLines,
                     textStyle = LocalTextStyle.current.copy(
                         color = TextPrimary,
                         fontSize = 14.sp
