@@ -412,11 +412,14 @@ class ClutchViewModel(application: Application) : AndroidViewModel(application) 
                     // Handled by local fallback
                 }
 
-                // If still empty (e.g. offline PDF), parse readable text streams
+                // If still empty (e.g. offline PDF or image), parse readable text streams
                 if (extractedText.isBlank() && bytes.isNotEmpty()) {
+                    val isImage = lower.endsWith(".png") || lower.endsWith(".jpg") ||
+                            lower.endsWith(".jpeg") || lower.endsWith(".webp") ||
+                            lower.endsWith(".bmp") || lower.endsWith(".gif")
                     if (lower.endsWith(".pdf")) {
                         val sb = StringBuilder()
-                        val textRegex = Regex("\\(([\\x20-\\x7E\\s]{3,})\\)")
+                        val textRegex = Regex("""\(([a-zA-Z0-9\s.,;:!?'"()-]{3,})\)""")
                         val rawContent = String(bytes, Charsets.ISO_8859_1)
                         for (match in textRegex.findAll(rawContent)) {
                             sb.append(match.groupValues[1]).append(" ")
@@ -425,6 +428,8 @@ class ClutchViewModel(application: Application) : AndroidViewModel(application) 
                         if (extractedText.isBlank()) {
                             extractedText = "Document: $fileName (${bytes.size} bytes). Ready for analysis."
                         }
+                    } else if (isImage) {
+                        extractedText = "Image document: $fileName (${bytes.size / 1024} KB). Ready for analysis."
                     } else {
                         extractedText = String(bytes, Charsets.UTF_8)
                     }
@@ -788,6 +793,7 @@ fun simulateUpload(fileName: String, fileType: FileType) {
 
                 val docSnippet = _attachedDocContent?.take(45000) ?: ""
                 val attachedTitle = attachedDoc
+                _attachedDocContent = null
 
                 val contentToSend = if (attachedTitle != null && docSnippet.isNotBlank()) {
                     "Regarding attached document '$attachedTitle':\n\n$promptText"

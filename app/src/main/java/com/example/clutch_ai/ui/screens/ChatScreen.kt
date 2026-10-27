@@ -296,6 +296,9 @@ fun ChatScreen(
                                 if (promptInput.isNotBlank()) {
                                     onSendMessage(promptInput)
                                     promptInput = ""
+                                } else if (!attachedDocTitle.isNullOrBlank()) {
+                                    onSendMessage("Analyze and explain this attached document.")
+                                    promptInput = ""
                                 }
                             },
                             backgroundColor = ElectricCyan,
@@ -579,13 +582,41 @@ fun UserMessageItem(
                 .border(1.dp, MidnightChassisBorder, bubbleShape)
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Text(
-                text = message.text,
-                color = Color.White,
-                fontSize = 15.sp,
-                lineHeight = 22.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                if (!message.attachedDocTitle.isNullOrBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .padding(bottom = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0F243A))
+                            .border(1.dp, ElectricCyan.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = "Attached Document",
+                            tint = ElectricCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = message.attachedDocTitle,
+                            color = ElectricCyan,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                    }
+                }
+                Text(
+                    text = message.text,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
