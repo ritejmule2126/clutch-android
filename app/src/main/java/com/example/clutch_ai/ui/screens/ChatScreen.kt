@@ -380,10 +380,10 @@ fun AiMessageItem(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "Assistant • On-Device",
+                        text = if (message.isThinking) "Clutch Cloud AI • Reasoning" else "Clutch Cloud AI • Live",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextMuted,
+                        color = ElectricCyanDark,
                         fontFamily = FontFamily.Monospace
                     )
                 }

@@ -38,6 +38,7 @@ import com.example.clutch_ai.viewmodel.UploadStep
 
 @Composable
 fun DashboardScreen(
+    userName: String = "",
     documents: List<StashDocument>,
     activeFilter: String,
     uploadState: UploadProgressState,
@@ -91,8 +92,11 @@ fun DashboardScreen(
                     .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
                     .padding(18.dp)
             ) {
+                val greetingName = remember(userName) {
+                    if (userName.isNotBlank()) userName.trim().split(" ").firstOrNull() ?: userName else "Friend"
+                }
                 Text(
-                    text = "Good day, Ritej",
+                    text = "Good day, $greetingName",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = MidnightChassis

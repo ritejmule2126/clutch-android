@@ -11,6 +11,46 @@ data class HealthResponse(
     val version: String
 )
 
+data class UserRegisterRequest(
+    val email: String,
+    val password: String,
+    @SerializedName("full_name") val fullName: String
+)
+
+data class UserLoginRequest(
+    val email: String,
+    val password: String
+)
+
+data class AuthResponse(
+    @SerializedName("access_token") val accessToken: String,
+    @SerializedName("token_type") val tokenType: String,
+    @SerializedName("user_id") val userId: String,
+    val email: String,
+    @SerializedName("full_name") val fullName: String?
+)
+
+data class BackendChatSession(
+    val id: String,
+    val title: String,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("updated_at") val updatedAt: String? = null
+)
+
+data class BackendChatMessage(
+    val id: String,
+    @SerializedName("session_id") val sessionId: String,
+    val role: String,
+    val content: String,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+data class BackendSessionDetail(
+    val id: String,
+    val title: String,
+    val messages: List<BackendChatMessage> = emptyList()
+)
+
 data class ChatStreamRequest(
     val content: String,
     @SerializedName("session_id") val sessionId: String? = null,
@@ -49,6 +89,24 @@ data class BackendDocument(
 interface ClutchApiService {
     @GET("health")
     suspend fun checkHealth(): Response<HealthResponse>
+
+    @POST("api/v1/auth/register")
+    suspend fun register(@Body request: UserRegisterRequest): Response<AuthResponse>
+
+    @POST("api/v1/auth/login")
+    suspend fun login(@Body request: UserLoginRequest): Response<AuthResponse>
+
+    @GET("api/v1/auth/me")
+    suspend fun getMe(@Header("Authorization") token: String): Response<AuthResponse>
+
+    @GET("api/v1/chat/sessions")
+    suspend fun listChatSessions(@Header("Authorization") token: String): Response<List<BackendChatSession>>
+
+    @GET("api/v1/chat/sessions/{session_id}")
+    suspend fun getChatSessionDetail(
+        @Path("session_id") sessionId: String,
+        @Header("Authorization") token: String
+    ): Response<BackendSessionDetail>
 
     @POST("api/v1/chat/stream")
     @Streaming

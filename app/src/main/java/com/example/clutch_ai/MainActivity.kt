@@ -51,6 +51,7 @@ import com.example.clutch_ai.ui.screens.ChatScreen
 import com.example.clutch_ai.ui.screens.DashboardScreen
 import com.example.clutch_ai.ui.screens.TrainScreen
 import com.example.clutch_ai.ui.screens.VaultScreen
+import com.example.clutch_ai.ui.screens.AuthScreen
 import com.example.clutch_ai.ui.theme.CanvasBackground
 import com.example.clutch_ai.ui.theme.ClutchaiTheme
 import com.example.clutch_ai.viewmodel.ClutchViewModel
@@ -91,11 +92,23 @@ fun ClutchAppRoot(
     var showIntro by rememberSaveable { mutableStateOf(true) }
     val isImeVisible = WindowInsets.isImeVisible
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CanvasBackground)
-    ) {
+    if (!uiState.isLoggedIn) {
+        AuthScreen(
+            isLoading = uiState.isAuthLoading,
+            errorMessage = uiState.authErrorMessage,
+            onSignUp = { fullName, email, password ->
+                viewModel.signUp(fullName, email, password)
+            },
+            onSignIn = { email, password ->
+                viewModel.signIn(email, password)
+            }
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CanvasBackground)
+        ) {
         // Main App Scaffold (Pre-composed underneath so Dashboard is instantly ready)
         Scaffold(
             topBar = {
@@ -130,6 +143,7 @@ fun ClutchAppRoot(
                 when (tabs[page]) {
                     NavigationTab.DASHBOARD -> {
                         DashboardScreen(
+                            userName = uiState.userFullName,
                             documents = uiState.documents,
                             activeFilter = uiState.activeFilter,
                             uploadState = uiState.uploadState,
@@ -263,9 +277,15 @@ fun ClutchAppRoot(
         // User Profile Modal
         if (isProfileOpen) {
             ProfileModal(
+                fullName = uiState.userFullName,
+                email = uiState.userEmail,
                 totalFiles = uiState.telemetry.totalFiles,
                 storageKb = uiState.telemetry.storageEstimateKb,
                 activeMemories = uiState.memories.size,
+                onSignOut = {
+                    viewModel.signOut()
+                    isProfileOpen = false
+                },
                 onDismiss = { isProfileOpen = false }
             )
         }
@@ -320,5 +340,6 @@ fun ClutchAppRoot(
                 onComplete = { showIntro = false }
             )
         }
+    }
     }
 }

@@ -3,6 +3,13 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import com.example.clutch_ai.data.UserSessionManager
+import com.example.clutch_ai.network.UserRegisterRequest
+import com.example.clutch_ai.network.UserLoginRequest
+import com.example.clutch_ai.network.BackendChatSession
+import com.example.clutch_ai.network.BackendChatMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clutch_ai.engine.UniversalKnowledgeEngine
@@ -37,6 +44,11 @@ data class UploadProgressState(
 )
 
 data class ClutchUiState(
+    val isLoggedIn: Boolean = false,
+    val isAuthLoading: Boolean = false,
+    val authErrorMessage: String? = null,
+    val userFullName: String = "",
+    val userEmail: String = "",
     val documents: List<StashDocument> = emptyList(),
     val chatSessions: List<ChatSession> = emptyList(),
     val activeSessionId: String = "",
@@ -59,17 +71,14 @@ data class ClutchUiState(
     val trainingState: TrainingProgressState = TrainingProgressState()
 )
 
-class ClutchViewModel : ViewModel() {
+class ClutchViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val sessionManager = UserSessionManager(application.applicationContext)
 
     private val _uiState = MutableStateFlow(ClutchUiState())
     val uiState: StateFlow<ClutchUiState> = _uiState.asStateFlow()
 
     init {
-        initializeProductionState()
-        fetchDocumentsFromBackend()
-    }
-
-    private fun initializeProductionState() {
         val initialSessionId = UUID.randomUUID().toString()
         val initialSession = ChatSession(
             id = initialSessionId,
@@ -78,20 +87,213 @@ class ClutchViewModel : ViewModel() {
             messages = emptyList()
         )
 
+        val loggedIn = sessionManager.isLoggedIn()
+        val savedName = sessionManager.getUserFullName() ?: ""
+        val savedEmail = sessionManager.getUserEmail() ?: ""
+
         _uiState.update {
             it.copy(
+                isLoggedIn = loggedIn,
+                userFullName = savedName,
+                userEmail = savedEmail,
                 documents = emptyList(),
                 memories = emptyList(),
                 chatSessions = listOf(initialSession),
                 activeSessionId = initialSessionId
             )
         }
+
+        if (loggedIn) {
+            syncUserData()
+        }
+    }
+
+    fun signUp(fullName: String, email: String, password: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) {
+                _uiState.update { it.copy(isAuthLoading = true, authErrorMessage = null) }
+            }
+            try {
+                val resp = ApiClient.apiService.register(
+                    UserRegisterRequest(email = email, password = password, fullName = fullName)
+                )
+                if (resp.isSuccessful && resp.body() != null) {
+                    val auth = resp.body()!!
+                    sessionManager.saveSession(
+                        accessToken = auth.accessToken,
+                        userId = auth.userId,
+                        email = auth.email,
+                        fullName = auth.fullName ?: fullName
+                    )
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                isLoggedIn = true,
+                                isAuthLoading = false,
+                                authErrorMessage = null,
+                                userFullName = auth.fullName ?: fullName,
+                                userEmail = auth.email
+                            )
+                        }
+                    }
+                    syncUserData()
+                } else {
+                    val err = resp.errorBody()?.string() ?: "Registration failed"
+                    val msg = try {
+                        JSONObject(err).optString("detail", "Registration failed")
+                    } catch (e: Exception) {
+                        "Registration failed"
+                    }
+                    withContext(Dispatchers.Main) {
+                        _uiState.update { it.copy(isAuthLoading = false, authErrorMessage = msg) }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(isAuthLoading = false, authErrorMessage = e.message ?: "Network error") }
+                }
+            }
+        }
+    }
+
+    fun signIn(email: String, password: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) {
+                _uiState.update { it.copy(isAuthLoading = true, authErrorMessage = null) }
+            }
+            try {
+                val resp = ApiClient.apiService.login(
+                    UserLoginRequest(email = email, password = password)
+                )
+                if (resp.isSuccessful && resp.body() != null) {
+                    val auth = resp.body()!!
+                    sessionManager.saveSession(
+                        accessToken = auth.accessToken,
+                        userId = auth.userId,
+                        email = auth.email,
+                        fullName = auth.fullName ?: ""
+                    )
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                isLoggedIn = true,
+                                isAuthLoading = false,
+                                authErrorMessage = null,
+                                userFullName = auth.fullName ?: "",
+                                userEmail = auth.email
+                            )
+                        }
+                    }
+                    syncUserData()
+                } else {
+                    val err = resp.errorBody()?.string() ?: "Login failed"
+                    val msg = try {
+                        JSONObject(err).optString("detail", "Invalid email or password")
+                    } catch (e: Exception) {
+                        "Invalid email or password"
+                    }
+                    withContext(Dispatchers.Main) {
+                        _uiState.update { it.copy(isAuthLoading = false, authErrorMessage = msg) }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(isAuthLoading = false, authErrorMessage = e.message ?: "Network error") }
+                }
+            }
+        }
+    }
+
+    fun signOut() {
+        sessionManager.clearSession()
+        val initialSessionId = UUID.randomUUID().toString()
+        _uiState.update {
+            ClutchUiState(
+                isLoggedIn = false,
+                userFullName = "",
+                userEmail = "",
+                chatSessions = listOf(ChatSession(id = initialSessionId, title = "New Chat", lastUpdated = "Just now", messages = emptyList())),
+                activeSessionId = initialSessionId
+            )
+        }
+    }
+
+    fun syncUserData() {
+        val token = sessionManager.getAccessToken() ?: return
+        val bearer = "Bearer $token"
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Sync User Profile Details
+                val meResp = ApiClient.apiService.getMe(bearer)
+                if (meResp.isSuccessful && meResp.body() != null) {
+                    val me = meResp.body()!!
+                    withContext(Dispatchers.Main) {
+                        _uiState.update {
+                            it.copy(
+                                userFullName = me.fullName ?: it.userFullName,
+                                userEmail = me.email
+                            )
+                        }
+                    }
+                }
+
+                // 2. Sync Chat Sessions from Backend
+                val sessResp = ApiClient.apiService.listChatSessions(bearer)
+                if (sessResp.isSuccessful && sessResp.body() != null) {
+                    val bSessions = sessResp.body()!!
+                    if (bSessions.isNotEmpty()) {
+                        val clientSessions = bSessions.map { bSess ->
+                            ChatSession(
+                                id = bSess.id,
+                                title = bSess.title,
+                                lastUpdated = bSess.updatedAt ?: "Recent",
+                                messages = emptyList()
+                            )
+                        }
+
+                        // Load messages for the first/active session
+                        val firstSessId = clientSessions.first().id
+                        val detailResp = ApiClient.apiService.getChatSessionDetail(firstSessId, bearer)
+                        val fullMessages = if (detailResp.isSuccessful && detailResp.body() != null) {
+                            detailResp.body()!!.messages.map { bm ->
+                                ChatMessage(
+                                    id = bm.id,
+                                    sender = if (bm.role == "user") MessageSender.USER else MessageSender.AI,
+                                    text = bm.content,
+                                    timestamp = bm.createdAt ?: "Earlier",
+                                    modelName = "Clutch Cloud AI • Live"
+                                )
+                            }
+                        } else emptyList()
+
+                        val updatedFirst = clientSessions.first().copy(messages = fullMessages)
+                        val finalSessions = listOf(updatedFirst) + clientSessions.drop(1)
+
+                        withContext(Dispatchers.Main) {
+                            _uiState.update {
+                                it.copy(
+                                    chatSessions = finalSessions,
+                                    activeSessionId = firstSessId
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 3. Sync Documents
+                fetchDocumentsFromBackend()
+            } catch (e: Exception) {
+                // Keep local state on error
+            }
+        }
     }
 
     fun fetchDocumentsFromBackend() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val response = ApiClient.apiService.listDocuments()
+                val token = sessionManager.getAccessToken()?.let { "Bearer $it" }
+                val response = ApiClient.apiService.listDocuments(token)
                 if (response.isSuccessful && response.body() != null) {
                     val backendDocs = response.body()!!
                     val stashDocs = backendDocs.map { bDoc ->
@@ -179,7 +381,8 @@ class ClutchViewModel : ViewModel() {
                     val requestBody = bytes.toRequestBody(mediaType)
                     val part = MultipartBody.Part.createFormData("file", fileName, requestBody)
                     val titleBody = fileName.toRequestBody("text/plain".toMediaTypeOrNull())
-                    ApiClient.apiService.uploadDocument(part, titleBody)
+                    val token = sessionManager.getAccessToken()?.let { "Bearer $it" }
+                    ApiClient.apiService.uploadDocument(part, titleBody, token)
                 } catch (ignored: Exception) {}
 
             } catch (e: Exception) {
@@ -340,7 +543,8 @@ class ClutchViewModel : ViewModel() {
                     }
                 }
 
-                val response = ApiClient.apiService.uploadDocument(part, titleBody)
+                val token = sessionManager.getAccessToken()?.let { "Bearer $it" }
+                val response = ApiClient.apiService.uploadDocument(part, titleBody, token)
                 val fType = when {
                     fileName.endsWith(".pdf", true) -> FileType.PDF
                     fileName.endsWith(".md", true) -> FileType.MARKDOWN
@@ -530,6 +734,7 @@ fun simulateUpload(fileName: String, fileType: FileType) {
                 }
 
                 val response = withContext(Dispatchers.IO) {
+                    val token = sessionManager.getAccessToken()?.let { "Bearer $it" }
                     ApiClient.apiService.streamChat(
                         request = ChatStreamRequest(
                             content = contentToSend,
@@ -538,6 +743,7 @@ fun simulateUpload(fileName: String, fileType: FileType) {
                             timezone = clientTz,
                             clientTime = clientNow
                         ),
+                        token = token,
                         timezone = clientTz
                     )
                 }

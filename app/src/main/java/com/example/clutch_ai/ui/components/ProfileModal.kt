@@ -1,14 +1,18 @@
 package com.example.clutch_ai.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FolderSpecial
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -24,11 +28,25 @@ import com.example.clutch_ai.ui.theme.*
 
 @Composable
 fun ProfileModal(
+    fullName: String,
+    email: String,
     totalFiles: Int,
     storageKb: Long,
     activeMemories: Int,
+    onSignOut: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val initials = remember(fullName) {
+        val parts = fullName.trim().split("\\s+".toRegex())
+        if (parts.size >= 2) {
+            "${parts[0].take(1)}${parts[1].take(1)}".uppercase()
+        } else if (parts.isNotEmpty() && parts[0].isNotEmpty()) {
+            parts[0].take(2).uppercase()
+        } else {
+            "U"
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -84,7 +102,7 @@ fun ProfileModal(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Profile Avatar & Basic Info
+                // Profile Avatar & Dynamic Info
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -97,7 +115,7 @@ fun ProfileModal(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "RM",
+                            text = initials,
                             color = ElectricCyan,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
@@ -108,14 +126,14 @@ fun ProfileModal(
 
                     Column {
                         Text(
-                            text = "Ritej Mule",
+                            text = fullName.ifBlank { "Authenticated User" },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MidnightChassis
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "ritejmule@gmail.com",
+                            text = email.ifBlank { "user@clutch.ai" },
                             fontSize = 13.sp,
                             color = TextMuted
                         )
@@ -127,7 +145,7 @@ fun ProfileModal(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "Pro Account",
+                                text = "Authenticated Account",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MidnightChassis
@@ -153,8 +171,8 @@ fun ProfileModal(
 
                 ProfileDetailRow(
                     icon = Icons.Default.VerifiedUser,
-                    label = "Account Plan",
-                    value = "Personal Pro"
+                    label = "Account Status",
+                    value = "Active (Verified)"
                 )
                 ProfileDetailRow(
                     icon = Icons.Default.FolderSpecial,
@@ -168,11 +186,42 @@ fun ProfileModal(
                 )
                 ProfileDetailRow(
                     icon = Icons.Default.Memory,
-                    label = "AI Engine",
-                    value = "Local Neural Engine v2.4"
+                    label = "Cloud AI Model",
+                    value = "Gemini 3.5 Flash Live"
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
+
+                // Sign Out Button
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        onSignOut()
+                    },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = StatusRose
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Logout,
+                        contentDescription = null,
+                        tint = StatusRose,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Sign Out",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = StatusRose
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Button(
                     onClick = onDismiss,
