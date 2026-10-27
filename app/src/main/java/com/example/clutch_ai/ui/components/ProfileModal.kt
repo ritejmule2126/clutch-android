@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -184,11 +184,7 @@ fun ProfileModal(
                     label = "Trained Rules",
                     value = "$activeMemories Active Directives"
                 )
-                ProfileDetailRow(
-                    icon = Icons.Default.Memory,
-                    label = "Cloud AI Model",
-                    value = "Gemini 3.5 Flash Live"
-                )
+
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -207,7 +203,7 @@ fun ProfileModal(
                         .height(44.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Logout,
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
                         contentDescription = null,
                         tint = StatusRose,
                         modifier = Modifier.size(16.dp)

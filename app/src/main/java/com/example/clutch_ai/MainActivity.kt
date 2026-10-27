@@ -44,6 +44,7 @@ import com.example.clutch_ai.ui.components.CinematicIntroScreen
 import com.example.clutch_ai.ui.components.CitationBottomSheet
 import com.example.clutch_ai.ui.components.ClutchBottomNavBar
 import com.example.clutch_ai.ui.components.ProfileModal
+import com.example.clutch_ai.ui.components.AuthModal
 import com.example.clutch_ai.ui.components.ClutchTopAppBar
 import com.example.clutch_ai.ui.components.NavigationTab
 import com.example.clutch_ai.ui.components.SpotlightSearchModal
@@ -92,32 +93,27 @@ fun ClutchAppRoot(
     var showIntro by rememberSaveable { mutableStateOf(true) }
     val isImeVisible = WindowInsets.isImeVisible
 
-    val showAuth = !uiState.hasCompletedFirstVisit && !uiState.isLoggedIn
-    if (showAuth) {
-        AuthScreen(
-            isLoading = uiState.isAuthLoading,
-            errorMessage = uiState.authErrorMessage,
-            onSignUp = { fullName, email, password ->
-                viewModel.signUp(fullName, email, password)
-            },
-            onSignIn = { email, password ->
-                viewModel.signIn(email, password)
-            },
-            onContinueAsGuest = {
-                viewModel.continueAsGuest()
-            }
-        )
-    } else {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(CanvasBackground)
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(CanvasBackground)
+    ) {
         // Main App Scaffold (Pre-composed underneath so Dashboard is instantly ready)
         Scaffold(
             topBar = {
+                val computedInitials = remember(uiState.userFullName) {
+                    val parts = uiState.userFullName.trim().split(" ")
+                    if (parts.size >= 2 && parts[0].isNotEmpty() && parts[1].isNotEmpty()) {
+                        "${parts[0].take(1)}${parts[1].take(1)}".uppercase()
+                    } else if (parts.isNotEmpty() && parts[0].isNotEmpty()) {
+                        parts[0].take(2).uppercase()
+                    } else "RM"
+                }
+
                 ClutchTopAppBar(
                     onOpenProfile = { isProfileOpen = true },
+                    isLoggedIn = uiState.isLoggedIn,
+                    userInitials = computedInitials,
                     showLogo = !showIntro
                 )
             },
@@ -278,20 +274,34 @@ fun ClutchAppRoot(
             }
         }
 
-        // User Profile Modal
+        // User Profile or Sign In / Sign Up Modal
         if (isProfileOpen) {
-            ProfileModal(
-                fullName = uiState.userFullName,
-                email = uiState.userEmail,
-                totalFiles = uiState.telemetry.totalFiles,
-                storageKb = uiState.telemetry.storageEstimateKb,
-                activeMemories = uiState.memories.size,
-                onSignOut = {
-                    viewModel.signOut()
-                    isProfileOpen = false
-                },
-                onDismiss = { isProfileOpen = false }
-            )
+            if (!uiState.isLoggedIn) {
+                AuthModal(
+                    isLoading = uiState.isAuthLoading,
+                    errorMessage = uiState.authErrorMessage,
+                    onSignUp = { fullName, email, password ->
+                        viewModel.signUp(fullName, email, password)
+                    },
+                    onSignIn = { email, password ->
+                        viewModel.signIn(email, password)
+                    },
+                    onDismiss = { isProfileOpen = false }
+                )
+            } else {
+                ProfileModal(
+                    fullName = uiState.userFullName,
+                    email = uiState.userEmail,
+                    totalFiles = uiState.telemetry.totalFiles,
+                    storageKb = uiState.telemetry.storageEstimateKb,
+                    activeMemories = uiState.memories.size,
+                    onSignOut = {
+                        viewModel.signOut()
+                        isProfileOpen = false
+                    },
+                    onDismiss = { isProfileOpen = false }
+                )
+            }
         }
 
         // Spotlight Cmd+K Search Modal
@@ -344,6 +354,5 @@ fun ClutchAppRoot(
                 onComplete = { showIntro = false }
             )
         }
-    }
     }
 }
