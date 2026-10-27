@@ -210,11 +210,12 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "DOCUMENTS",
+                                text = "DOCS",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextMuted,
-                                fontFamily = FontFamily.Monospace
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
