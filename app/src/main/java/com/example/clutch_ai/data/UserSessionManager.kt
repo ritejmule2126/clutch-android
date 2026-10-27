@@ -12,6 +12,13 @@ class UserSessionManager(context: Context) {
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_USER_NAME = "user_full_name"
+        private const val KEY_FIRST_VISIT_DONE = "first_visit_completed"
+    }
+
+    fun hasCompletedFirstVisit(): Boolean = prefs.getBoolean(KEY_FIRST_VISIT_DONE, false)
+
+    fun markFirstVisitCompleted() {
+        prefs.edit().putBoolean(KEY_FIRST_VISIT_DONE, true).apply()
     }
 
     fun saveSession(accessToken: String, userId: String, email: String, fullName: String?) {
@@ -20,6 +27,7 @@ class UserSessionManager(context: Context) {
             .putString(KEY_USER_ID, userId)
             .putString(KEY_USER_EMAIL, email)
             .putString(KEY_USER_NAME, fullName ?: "")
+            .putBoolean(KEY_FIRST_VISIT_DONE, true)
             .apply()
     }
 
@@ -34,6 +42,12 @@ class UserSessionManager(context: Context) {
     fun isLoggedIn(): Boolean = !getAccessToken().isNullOrBlank()
 
     fun clearSession() {
-        prefs.edit().clear().apply()
+        // Keep KEY_FIRST_VISIT_DONE intact so user is not repeatedly sent to signup page
+        prefs.edit()
+            .remove(KEY_ACCESS_TOKEN)
+            .remove(KEY_USER_ID)
+            .remove(KEY_USER_EMAIL)
+            .remove(KEY_USER_NAME)
+            .apply()
     }
 }

@@ -92,7 +92,8 @@ fun ClutchAppRoot(
     var showIntro by rememberSaveable { mutableStateOf(true) }
     val isImeVisible = WindowInsets.isImeVisible
 
-    if (!uiState.isLoggedIn) {
+    val showAuth = !uiState.hasCompletedFirstVisit && !uiState.isLoggedIn
+    if (showAuth) {
         AuthScreen(
             isLoading = uiState.isAuthLoading,
             errorMessage = uiState.authErrorMessage,
@@ -101,6 +102,9 @@ fun ClutchAppRoot(
             },
             onSignIn = { email, password ->
                 viewModel.signIn(email, password)
+            },
+            onContinueAsGuest = {
+                viewModel.continueAsGuest()
             }
         )
     } else {

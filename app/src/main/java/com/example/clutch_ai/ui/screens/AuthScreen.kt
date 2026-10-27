@@ -45,6 +45,7 @@ fun AuthScreen(
     errorMessage: String?,
     onSignUp: (fullName: String, email: String, password: String) -> Unit,
     onSignIn: (email: String, password: String) -> Unit,
+    onContinueAsGuest: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isSignUpMode by remember { mutableStateOf(true) }
@@ -337,6 +338,21 @@ fun AuthScreen(
                                 color = if (email.isNotBlank() && password.isNotBlank() && (!isSignUpMode || fullName.isNotBlank())) ElectricCyan else Color.White
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Quick bypass for returning/exploring users
+                    androidx.compose.material3.TextButton(
+                        onClick = onContinueAsGuest,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Continue to Dashboard →",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ElectricCyanDark
+                        )
                     }
                 }
             }

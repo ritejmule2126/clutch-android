@@ -45,10 +45,13 @@ data class UploadProgressState(
 
 data class ClutchUiState(
     val isLoggedIn: Boolean = false,
+    val hasCompletedFirstVisit: Boolean = false,
     val isAuthLoading: Boolean = false,
     val authErrorMessage: String? = null,
     val userFullName: String = "",
     val userEmail: String = "",
+    val isExtractingDocument: Boolean = false,
+    val attachedDocWordCount: Int = 0,
     val documents: List<StashDocument> = emptyList(),
     val chatSessions: List<ChatSession> = emptyList(),
     val activeSessionId: String = "",
@@ -88,12 +91,14 @@ class ClutchViewModel(application: Application) : AndroidViewModel(application) 
         )
 
         val loggedIn = sessionManager.isLoggedIn()
+        val firstVisitDone = sessionManager.hasCompletedFirstVisit()
         val savedName = sessionManager.getUserFullName() ?: ""
         val savedEmail = sessionManager.getUserEmail() ?: ""
 
         _uiState.update {
             it.copy(
                 isLoggedIn = loggedIn,
+                hasCompletedFirstVisit = firstVisitDone,
                 userFullName = savedName,
                 userEmail = savedEmail,
                 documents = emptyList(),
@@ -204,12 +209,18 @@ class ClutchViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun continueAsGuest() {
+        sessionManager.markFirstVisitCompleted()
+        _uiState.update { it.copy(hasCompletedFirstVisit = true) }
+    }
+
     fun signOut() {
         sessionManager.clearSession()
         val initialSessionId = UUID.randomUUID().toString()
         _uiState.update {
             ClutchUiState(
                 isLoggedIn = false,
+                hasCompletedFirstVisit = true,
                 userFullName = "",
                 userEmail = "",
                 chatSessions = listOf(ChatSession(id = initialSessionId, title = "New Chat", lastUpdated = "Just now", messages = emptyList())),
@@ -348,11 +359,20 @@ class ClutchViewModel(application: Application) : AndroidViewModel(application) 
 
     fun removeAttachedDoc() {
         _attachedDocContent = null
-        _uiState.update { it.copy(attachedDocTitle = null) }
+        _uiState.update {
+            it.copy(
+                attachedDocTitle = null,
+                attachedDocWordCount = 0,
+                isExtractingDocument = false
+            )
+        }
     }
 
     fun attachDocumentFromUri(context: android.content.Context, uri: android.net.Uri) {
         viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) {
+                _uiState.update { it.copy(isExtractingDocument = true, attachedDocTitle = "Extracting text...") }
+            }
             try {
                 var fileName = "Document"
                 context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -363,31 +383,71 @@ class ClutchViewModel(application: Application) : AndroidViewModel(application) 
                 }
 
                 val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
-                val textContent = if (fileName.endsWith(".pdf", ignoreCase = true)) {
-                    "Attached PDF: $fileName (${bytes.size} bytes). Uploaded and referenced in session."
-                } else {
-                    String(bytes, Charsets.UTF_8)
+                var extractedText = ""
+
+                val lower = fileName.lowercase()
+                val isTextBased = lower.endsWith(".txt") || lower.endsWith(".md") ||
+                        lower.endsWith(".json") || lower.endsWith(".csv") ||
+                        lower.endsWith(".html") || lower.endsWith(".xml") ||
+                        lower.endsWith(".log")
+
+                if (isTextBased && bytes.isNotEmpty()) {
+                    extractedText = String(bytes, Charsets.UTF_8)
                 }
 
-                _attachedDocContent = textContent
-
-                withContext(Dispatchers.Main) {
-                    _uiState.update { it.copy(attachedDocTitle = fileName) }
-                    android.widget.Toast.makeText(context, "Attached: $fileName", android.widget.Toast.LENGTH_SHORT).show()
-                }
-
+                // Call backend extraction endpoint for PDFs & advanced formats
                 try {
-                    val mediaType = "application/octet-stream".toMediaTypeOrNull()
+                    val mediaType = (context.contentResolver.getType(uri) ?: "application/octet-stream").toMediaTypeOrNull()
                     val requestBody = bytes.toRequestBody(mediaType)
                     val part = MultipartBody.Part.createFormData("file", fileName, requestBody)
-                    val titleBody = fileName.toRequestBody("text/plain".toMediaTypeOrNull())
                     val token = sessionManager.getAccessToken()?.let { "Bearer $it" }
-                    ApiClient.apiService.uploadDocument(part, titleBody, token)
-                } catch (ignored: Exception) {}
+                    val resp = ApiClient.apiService.extractDocument(part, token)
+                    if (resp.isSuccessful && resp.body() != null) {
+                        val backendExtracted = resp.body()!!.text
+                        if (backendExtracted.isNotBlank()) {
+                            extractedText = backendExtracted
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Handled by local fallback
+                }
+
+                // If still empty (e.g. offline PDF), parse readable text streams
+                if (extractedText.isBlank() && bytes.isNotEmpty()) {
+                    if (lower.endsWith(".pdf")) {
+                        val sb = StringBuilder()
+                        val textRegex = Regex("\\(([\\x20-\\x7E\\s]{3,})\\)")
+                        val rawContent = String(bytes, Charsets.ISO_8859_1)
+                        for (match in textRegex.findAll(rawContent)) {
+                            sb.append(match.groupValues[1]).append(" ")
+                        }
+                        extractedText = sb.toString().trim()
+                        if (extractedText.isBlank()) {
+                            extractedText = "Document: $fileName (${bytes.size} bytes). Ready for analysis."
+                        }
+                    } else {
+                        extractedText = String(bytes, Charsets.UTF_8)
+                    }
+                }
+
+                _attachedDocContent = extractedText
+                val words = if (extractedText.isNotBlank()) extractedText.trim().split(" ").size else 0
+
+                withContext(Dispatchers.Main) {
+                    _uiState.update {
+                        it.copy(
+                            isExtractingDocument = false,
+                            attachedDocTitle = fileName,
+                            attachedDocWordCount = words
+                        )
+                    }
+                    android.widget.Toast.makeText(context, "Attached: $fileName ($words words)", android.widget.Toast.LENGTH_SHORT).show()
+                }
 
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    _uiState.update { it.copy(isExtractingDocument = false, attachedDocTitle = null) }
+                    android.widget.Toast.makeText(context, "Attachment error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -726,9 +786,11 @@ fun simulateUpload(fileName: String, fileType: FileType) {
                 val clientTz = java.util.TimeZone.getDefault().id
                 val clientNow = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).format(java.util.Date())
 
-                val docSnippet = _attachedDocContent?.take(8000) ?: ""
-                val contentToSend = if (attachedDoc != null && docSnippet.isNotBlank()) {
-                    "Referencing Attached Document ($attachedDoc): " + docSnippet + " " + promptText
+                val docSnippet = _attachedDocContent?.take(45000) ?: ""
+                val attachedTitle = attachedDoc
+
+                val contentToSend = if (attachedTitle != null && docSnippet.isNotBlank()) {
+                    "Regarding attached document '$attachedTitle':\n\n$promptText"
                 } else {
                     promptText
                 }
@@ -741,7 +803,9 @@ fun simulateUpload(fileName: String, fileType: FileType) {
                             sessionId = session.id,
                             useRag = true,
                             timezone = clientTz,
-                            clientTime = clientNow
+                            clientTime = clientNow,
+                            attachedDocTitle = attachedTitle,
+                            attachedDocContent = if (attachedTitle != null && docSnippet.isNotBlank()) docSnippet else null
                         ),
                         token = token,
                         timezone = clientTz

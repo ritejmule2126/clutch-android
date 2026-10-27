@@ -58,7 +58,17 @@ data class ChatStreamRequest(
     val model: String? = null,
     @SerializedName("use_rag") val useRag: Boolean = true,
     val timezone: String? = null,
-    @SerializedName("client_time") val clientTime: String? = null
+    @SerializedName("client_time") val clientTime: String? = null,
+    @SerializedName("attached_doc_title") val attachedDocTitle: String? = null,
+    @SerializedName("attached_doc_content") val attachedDocContent: String? = null
+)
+
+data class DocumentExtractResponse(
+    val filename: String,
+    @SerializedName("file_type") val fileType: String,
+    @SerializedName("page_count") val pageCount: Int,
+    val text: String,
+    @SerializedName("word_count") val wordCount: Int
 )
 
 data class SearchRequest(
@@ -115,6 +125,13 @@ interface ClutchApiService {
         @Header("Authorization") token: String? = null,
         @Header("X-Timezone") timezone: String? = null
     ): Response<ResponseBody>
+
+    @Multipart
+    @POST("api/v1/documents/extract")
+    suspend fun extractDocument(
+        @Part file: okhttp3.MultipartBody.Part,
+        @Header("Authorization") token: String? = null
+    ): Response<DocumentExtractResponse>
 
     @Multipart
     @POST("api/v1/documents/upload")
